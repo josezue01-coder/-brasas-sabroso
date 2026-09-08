@@ -1467,7 +1467,7 @@ function doLogin(){
     const u=AUTH.login(user,pass);
     if(u){
       err.textContent='';
-      document.getElementById('login-overlay').classList.add('hidden');
+      document.getElementById('login-overlay').style.display='none';
       applySession(u);
     }else{
       err.textContent='❌ Usuario o contraseña incorrectos';
@@ -1487,7 +1487,7 @@ document.addEventListener('keydown',function(e){
 
 function doLogout(){
   AUTH.logout();closeSessionMenu();
-  document.getElementById('login-overlay').classList.remove('hidden');
+  document.getElementById('login-overlay').style.display='flex';
   document.getElementById('li-user').value='';
   document.getElementById('li-pass').value='';
   document.getElementById('li-error').textContent='';
@@ -1512,8 +1512,11 @@ function applySession(u){
   goInternal(cfg.tabs[0]||'ventas');
 }
 
-function toggleSessionMenu(){document.getElementById('session-menu').classList.toggle('hidden');}
-function closeSessionMenu(){document.getElementById('session-menu').classList.add('hidden');}
+function toggleSessionMenu(){
+  const m=document.getElementById('session-menu');
+  m.style.display=m.style.display==='flex'?'none':'flex';
+}
+function closeSessionMenu(){document.getElementById('session-menu').style.display='none';}
 document.addEventListener('click',function(e){
   const b=document.getElementById('user-badge');
   const m=document.getElementById('session-menu');
@@ -3060,9 +3063,9 @@ function exportAnalCSV(){
   a.download='analisis_brasas.csv'; a.click(); toast('📥 CSV exportado');
 }
 
-function importarDatosExcel(){document.getElementById('import-modal').classList.remove('hidden');switchImpTab('julio');}
+function importarDatosExcel(){document.getElementById('import-modal').style.display='flex';switchImpTab('julio');}
 
-function closeImport(){document.getElementById('import-modal').classList.add('hidden');}
+function closeImport(){document.getElementById('import-modal').style.display='none';}
 
 function switchImpTab(tab){
   impTab=tab;
@@ -3190,7 +3193,7 @@ function initHeader(){
   FDB.load();
   const cur=AUTH.current();
   if(cur){
-    document.getElementById('login-overlay').classList.add('hidden');
+    document.getElementById('login-overlay').style.display='none';
     applySession(cur);
   }else{
     setTimeout(function(){try{document.getElementById('li-user').focus();}catch(e){}},300);
