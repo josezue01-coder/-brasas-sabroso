@@ -1414,6 +1414,23 @@ function dualFmt(usd){
 }
 const fd=d=>{if(!d)return '';const[y,m,dd]=d.split('-');return`${dd}/${m}/${y}`};
 const sum=(arr,fn)=>arr.reduce((s,x)=>s+fn(x),0);
+
+function startOf(p){
+  const d=new Date();
+  if(p==='hoy'){
+    return d.toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'});
+  }
+  if(p==='semana'){
+    d.setDate(d.getDate()-6);
+    return d.toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'});
+  }
+  if(p==='mes'){
+    d.setDate(1);
+    return d.toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'});
+  }
+  // 'todo' o cualquier otro
+  return '01/01/2020';
+}
 function filt(arr,p,desde,hasta){
   const s=desde||startOf(p), e=hasta||hoy();
   return arr.filter(x=>x.fecha>=s&&x.fecha<=e);
@@ -1653,7 +1670,7 @@ function actualizarLabelTasa(){
   }
 }
 
-function fetchTasaBCV(){
+async function fetchTasaBCV(){
   const btn=document.getElementById('btn-bcv-auto');
   const status=document.getElementById('tasa-status');
   if(btn){btn.textContent='⏳ Consultando...';btn.style.opacity='.6';btn.disabled=true;}
@@ -1719,7 +1736,7 @@ function fetchTasaBCV(){
   if(btn){btn.textContent='🌐 BCV Automático';btn.style.opacity='1';btn.disabled=false;}
 }
 
-function autoFetchIfStale(){
+async function autoFetchIfStale(){
   const saved=localStorage.getItem('rp2_tasa_fecha')||'';
   const hoy=new Date().toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'});
   if(!saved.startsWith(hoy) && TASA.get()>0){
@@ -2543,7 +2560,7 @@ function convUsdToBs(){
 function fmtN(n){return fmtUSD(n);}
 function fmtI(n){return Number(n||0).toLocaleString('es-VE',{minimumFractionDigits:0,maximumFractionDigits:0});}
 function kpiCard(val,lbl,sub,cls){
-  return '<div class="kpi-card"><div class="kpi-val '+(cls||'")>'+val+'</div><div class="kpi-lbl">'+lbl+'</div>'+(sub?'<div class="kpi-sub">'+sub+'</div>':'')+'</div>';
+  return '<div class="kpi-card"><div class="kpi-val '+(cls||'')+'">'+(val||'')+'</div><div class="kpi-lbl">'+(lbl||'')+'</div>'+(sub?'<div class="kpi-sub">'+sub+'</div>':'')+'</div>';
 }
 function kpiDual(usd,lbl,isBs){
   const t=TASA.get();
@@ -3112,7 +3129,7 @@ const SYNC_CFG = {
   addLog(entry){ const l=JSON.parse(localStorage.getItem('rs_log')||'[]'); l.unshift(entry); localStorage.setItem('rs_log',JSON.stringify(l.slice(0,30))) },
   getLogs()    { return JSON.parse(localStorage.getItem('rs_log')||'[]') }
 };
-function syncPush(){
+async function syncPush(){
   setBtnLoading('btn-push',true,'⬆ Subir mis datos a la nube');
   const ts=new Date(); const hora=ts.toTimeString().slice(0,5);
   const r=await callAPI('push');
@@ -3124,7 +3141,7 @@ function syncPush(){
   renderSyncLog(); updateSyncStatus();
 }
 
-function syncPull(){
+async function syncPull(){
   setBtnLoading('btn-pull',true,'⬇ Bajar datos de la nube');
   const ts=new Date(); const hora=ts.toTimeString().slice(0,5);
   const r=await callAPI('pull');
@@ -3151,7 +3168,7 @@ function syncPull(){
   renderSyncLog(); updateSyncStatus();
 }
 
-function autoSync(action, extraData){
+async function autoSync(action, extraData){
   const url = SYNC_CFG && SYNC_CFG.url;
   if(!url) return; // Sin configurar, silencioso
   try{
