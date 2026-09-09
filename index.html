@@ -163,6 +163,8 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.4) sepia(1) s
 .mtitle{font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--t1)}
 
 /* TOAST */
+.login-shake{animation:shake .4s ease;}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--teal);color:#020d1a;padding:9px 20px;border-radius:30px;font-size:.8rem;font-weight:700;z-index:999;transition:transform .35s cubic-bezier(.34,1.4,.64,1);white-space:nowrap;box-shadow:0 8px 32px rgba(0,212,170,.35);pointer-events:none}
 .toast.on{transform:translateX(-50%) translateY(0)}
 .toast.err{background:var(--red);box-shadow:0 8px 32px rgba(255,71,87,.35)}
@@ -592,6 +594,11 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.4) sepia(1) s
       <div class="lbl">Inv. Valor</div>
       <div class="val" id="d-iv">$0</div>
       <div class="sub">total stock</div>
+    </div>
+    <div class="card" style="background:rgba(200,134,10,.12);border-color:#c8860a">
+      <div class="lbl">Tasa BCV</div>
+      <div class="val" id="d-tasa" style="font-size:1rem">—</div>
+      <div class="sub">Bs / USD</div>
     </div>
   </div>
 
@@ -1436,6 +1443,7 @@ function filt(arr,p,desde,hasta){
   return arr.filter(x=>x.fecha>=s&&x.fecha<=e);
 }
 
+var _toastT;
 function toast(msg,err=false){
   const el=document.getElementById('toast');
   el.textContent=msg; el.className='toast'+(err?' err':'')+' on';
@@ -1487,7 +1495,13 @@ function doLogin(){
       document.getElementById('login-overlay').style.display='none';
       applySession(u);
     }else{
-      err.textContent='❌ Usuario o contraseña incorrectos';
+      err.textContent='❌ Usuario o contraseña incorrectos. Verifica y vuelve a intentar.';
+      document.getElementById('li-user').style.borderColor='#e8001a';
+      document.getElementById('li-pass').style.borderColor='#e8001a';
+      setTimeout(function(){
+        document.getElementById('li-user').style.borderColor='';
+        document.getElementById('li-pass').style.borderColor='';
+      },2000);
       document.getElementById('li-pass').value='';
     }
   }catch(e){
@@ -1583,6 +1597,7 @@ function goInternal(id){
   if(id==='cruce'){if(typeof initCruce==='function')initCruce();}
   if(id==='anal'){renderAnal();}
   if(id==='admin')renderUsersList();
+  if(id==='sync')initSync();
 }
 function go(id){
   const cur=AUTH.current();if(!cur)return;
@@ -1629,7 +1644,9 @@ function saveUser(){
       users.push({user,pass:hashed,role,nombre,hashed:true});
       toast('✅ Usuario creado');
     }
-    AUTH.saveUsers(users);hideAddUser();renderUsersList();
+    AUTH.saveUsers(users);
+    hideAddUser();
+    renderUsersList();
   });
 }
 
@@ -1769,10 +1786,15 @@ function renderDash(){
   const g=tv-tc;
   const sb=DB.inv.filter(p=>+p.stock<=+p.stockMin).length;
   const iv=sum(DB.inv,p=>(+p.costo||0)*(+p.stock||0));
+  const t=TASA.get();
 
-  set('d-v',fmt(tv)); set('d-vn',vH.length+' tickets');
-  set('d-c',fmt(tc)); set('d-cn',cH.length+' registros');
-  set('d-g',fmt(g)); document.getElementById('d-g').style.color=g>=0?'var(--green)':'var(--red)';
+  // Mostrar USD y Bs
+  const fmtDual=(usd)=>fmtUSD(usd)+(t>0?' / '+fmtBs(usd*t):'');
+  set('d-v',fmtDual(tv)); set('d-vn',vH.length+' tickets');
+  set('d-c',fmtDual(tc)); set('d-cn',cH.length+' registros');
+  set('d-g',fmtDual(g));
+  set('d-tasa',t>0?t.toLocaleString('es-VE',{minimumFractionDigits:2}):'Sin tasa');
+  document.getElementById('d-g').style.color=g>=0?'var(--green)':'var(--red)';
   set('d-sb',sb); set('d-iv',fmt(iv));
 
   // Movimientos recientes
@@ -1843,6 +1865,7 @@ function saveVenta(){
     if(p){obj.invNom=p.nombre; DB.adjStock(+invSel,-cant,`Venta: ${desc}`,'venta')}
   }
   DB.addV(obj);
+  toast('✅ Venta guardada: '+desc+' '+fmtUSD(precio*cant));
   cModal('mv');
   ['v-desc','v-precio','v-nota'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('v-cant').value=1;
@@ -1896,6 +1919,7 @@ function saveCompra(){
     if(p){obj.invId=p.id;obj.invNom=p.nombre; DB.adjStock(+invSel,cant,`Compra: ${prod}`,'compra')}
   }
   DB.addC(obj);
+  toast('✅ Compra guardada: '+prod+' '+fmtUSD(monto));
   cModal('mc');
   ['c-prod','c-monto','c-nota','c-prov'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('c-cant').value=1;
@@ -1970,8 +1994,9 @@ function saveProd(){
     costo:parseFloat(document.getElementById('p-costo').value)||0,
     pventa:parseFloat(document.getElementById('p-pventa').value)||0
   };
-  if(pid)DB.updProd(p); else DB.addProd(p);
-  cModal('mp'); toast('✅ Producto guardado'); renderInv();
+  if(pid){ DB.updProd(p); toast('✅ Producto actualizado: '+nom); }
+  else { DB.addProd(p); toast('✅ Producto creado: '+nom); }
+  cModal('mp'); renderInv(); populateInvSelects();
 }
 
 function delProd(id){if(!confirm('¿Eliminar producto?'))return;DB.delProd(id);renderInv();toast('Producto eliminado')}
@@ -3197,6 +3222,81 @@ async function autoSync(action, extraData){
   }
 }
 
+// ═══ SYNC UI ═══
+function saveConfig(){
+  var url=(document.getElementById('sync-url')||{value:''}).value.trim();
+  var device=((document.getElementById('sync-device')||{value:''}).value.trim())||'Mi dispositivo';
+  if(!url){
+    toast('⚠️ Pega la URL del Apps Script antes de guardar',true);
+    var inp=document.getElementById('sync-url');
+    if(inp){inp.style.borderColor='#e8001a';setTimeout(function(){inp.style.borderColor='';},2000);}
+    return;
+  }
+  if(url.indexOf('script.google.com')<0){
+    toast('⚠️ URL inválida — debe ser de Google Apps Script',true);
+    return;
+  }
+  SYNC_CFG.url=url;
+  SYNC_CFG.device=device;
+  toast('✅ Configuración guardada. Ya puedes sincronizar.');
+  var dot=document.getElementById('sync-dot');
+  var txt=document.getElementById('sync-status-txt');
+  var sub=document.getElementById('sync-status-sub');
+  if(dot) dot.style.background='#4caf50';
+  if(txt) txt.textContent='Configurado ✅';
+  if(sub) sub.textContent='URL guardada — listo para sincronizar';
+}
+
+function syncBoth(){
+  toast('🔄 Sincronizando...');
+  syncPush().then(function(){ return syncPull(); })
+    .then(function(){ toast('✅ Sincronización completa'); renderSyncLog(); })
+    .catch(function(e){ toast('❌ Error: '+e.message,true); });
+}
+
+function initSync(){
+  var url=SYNC_CFG.url;
+  var device=SYNC_CFG.device;
+  var inp=document.getElementById('sync-url');
+  var dev=document.getElementById('sync-device');
+  if(inp&&url) inp.value=url;
+  if(dev) dev.value=device;
+  var dot=document.getElementById('sync-dot');
+  var txt=document.getElementById('sync-status-txt');
+  var sub=document.getElementById('sync-status-sub');
+  var last=document.getElementById('sync-last');
+  if(url){
+    if(dot) dot.style.background='#4caf50';
+    if(txt) txt.textContent='Configurado ✅';
+    if(sub) sub.textContent='Sincronizando con Google Sheets';
+  }else{
+    if(dot) dot.style.background='#888';
+    if(txt) txt.textContent='Sin configurar';
+    if(sub) sub.textContent='Pega la URL del Apps Script y guarda';
+  }
+  try{
+    var log=JSON.parse(localStorage.getItem('rs_log')||'[]');
+    if(log.length>0&&last) last.textContent='Último: '+(log[0].hora||'');
+  }catch(e){}
+  renderSyncLog();
+}
+
+function renderSyncLog(){
+  var el=document.getElementById('sync-log');
+  if(!el) return;
+  var log=[];
+  try{ log=JSON.parse(localStorage.getItem('rs_log')||'[]'); }catch(e){}
+  if(!log.length){
+    el.innerHTML='<div style="color:var(--t3);font-size:.76rem;font-family:var(--mono);padding:8px 0">Sin sincronizaciones aún</div>';
+    return;
+  }
+  el.innerHTML=log.slice(0,10).map(function(e){
+    return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border2);font-size:.72rem;font-family:var(--mono)">'+
+      '<span style="color:'+(e.ok?'#4caf50':'#e8001a')+'">'+(e.ok?'✅':'❌')+' '+(e.msg||'')+'</span>'+
+      '<span style="color:var(--t3)">'+(e.hora||'')+'</span></div>';
+  }).join('');
+}
+
 function initHeader(){
   const n=new Date();
   const dias=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
@@ -3205,6 +3305,281 @@ function initHeader(){
     `${dias[n.getDay()]} ${n.getDate()} ${mes[n.getMonth()]}<br>${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
 }
 
+
+
+// ═══ ALIAS Y FUNCIONES FALTANTES ═══
+
+// oModal = alias de cModal (abrir modal)
+function oModal(id){
+  const el=document.getElementById(id);
+  if(el) el.style.display='flex';
+}
+
+// setF — filtro de chips en ventas/compras
+function setF(tipo,per,el){
+  // Activar chip
+  const chips=document.getElementById(tipo==='v'?'vchips':'cchips');
+  if(chips) chips.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));
+  if(el) el.classList.add('on');
+  // Re-renderizar con el período seleccionado
+  if(tipo==='v') renderVentas(per);
+  else if(tipo==='c') renderCompras(per);
+}
+
+// openProd — abrir modal de producto (nuevo o editar)
+function openProd(id){
+  const el=document.getElementById('mp');
+  if(!el) return;
+  const titleEl=document.getElementById('mp-title');
+  const pidEl=document.getElementById('p-id');
+  // Limpiar campos
+  ['p-nom','p-stock','p-min','p-costo','p-pventa'].forEach(function(fid){
+    const f=document.getElementById(fid);
+    if(f) f.value='';
+  });
+  const un=document.getElementById('p-un');
+  if(un) un.value='unid';
+  if(pidEl) pidEl.value='';
+  if(id){
+    const prod=DB.getProd(id);
+    if(!prod){toast('⚠️ Producto no encontrado',true);return;}
+    if(titleEl) titleEl.textContent='✏️ Editar Producto';
+    if(pidEl) pidEl.value=prod.id;
+    const setV=(fid,val)=>{const f=document.getElementById(fid);if(f)f.value=val||'';};
+    setV('p-nom',prod.nombre);
+    setV('p-stock',prod.stock);
+    setV('p-min',prod.stockMin);
+    setV('p-costo',prod.costo);
+    setV('p-pventa',prod.pventa);
+    if(un) un.value=prod.unidad||'unid';
+  } else {
+    if(titleEl) titleEl.textContent='📦 Nuevo Producto';
+  }
+  el.style.display='flex';
+}
+
+// verHist — ver historial de movimientos de un producto
+function verHist(id){
+  const prod=DB.getProd(id);
+  if(!prod){toast('⚠️ Producto no encontrado',true);return;}
+  const el=document.getElementById('mh');
+  const title=document.getElementById('mh-title');
+  const body=document.getElementById('mh-body');
+  if(!el||!body) return;
+  if(title) title.textContent='📋 Historial: '+prod.nombre;
+  const movs=(DB.movs||[]).filter(m=>m.prodId===id)
+    .sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+  const t=TASA.get();
+  body.innerHTML=movs.length?movs.map(m=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border2)">
+      <div style="width:28px;height:28px;border-radius:50%;background:${m.tipo==='entrada'?'rgba(76,175,80,.2)':'rgba(232,0,26,.2)'};
+        display:flex;align-items:center;justify-content:center;font-size:.9rem;flex:none">
+        ${m.tipo==='entrada'?'⬆️':'⬇️'}
+      </div>
+      <div style="flex:1">
+        <div style="font-size:.78rem;font-weight:600;color:var(--t1)">${m.tipo==='entrada'?'+':'−'}${m.cant} ${prod.unidad||'u'}</div>
+        <div style="font-size:.68rem;color:var(--t3);font-family:var(--mono)">${m.motivo||''}</div>
+        <div style="font-size:.65rem;color:var(--t3)">${m.fecha||''}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:.75rem;font-weight:700;color:var(--t1)">${m.despues||0} en stock</div>
+        ${t>0?`<div style="font-size:.65rem;color:#ffcc44">${fmtBs((m.cant||0)*(prod.costo||0)*t)}</div>`:''}
+      </div>
+    </div>`).join('')
+    :'<div style="color:var(--t3);font-size:.78rem;text-align:center;padding:20px">Sin movimientos registrados</div>';
+  el.style.display='flex';
+}
+
+// regMov — registrar movimiento manual de inventario
+function regMov(){
+  // Usar el producto seleccionado en el filtro de inventario
+  const sel=document.getElementById('i-prod-sel');
+  const prodId=sel&&sel.value?+sel.value:null;
+  if(!prodId){
+    toast('⚠️ Selecciona un producto primero',true);
+    return;
+  }
+  const prod=DB.getProd(prodId);
+  if(!prod){toast('⚠️ Producto no encontrado',true);return;}
+  const tipo=prompt('Tipo de movimiento:\n1 = Entrada (agregar stock)\n2 = Salida (quitar stock)');
+  if(!tipo) return;
+  const esTipo=tipo.trim()==='1'?'entrada':'salida';
+  const cantStr=prompt('Cantidad a '+esTipo+':');
+  if(!cantStr) return;
+  const cant=parseFloat(cantStr)||0;
+  if(cant<=0){toast('⚠️ Ingresa una cantidad válida',true);return;}
+  const motivo=prompt('Motivo (ej: Compra, Merma, Ajuste...)')||'Movimiento manual';
+  const delta=esTipo==='entrada'?cant:-cant;
+  DB.adjStock(prodId,delta,motivo,'manual');
+  const t=TASA.get();
+  const prod2=DB.getProd(prodId);
+  toast('✅ Movimiento registrado: '+esTipo+' de '+cant+' '+prod.unidad+
+    '. Stock actual: '+prod2.stock+(t>0?' ('+fmtBs(prod2.stock*(prod.costo||0)*t)+')':''));
+  renderInv();
+}
+
+// calcCruce — calcular cruce de ventas vs compras
+function calcCruce(){
+  const desde=document.getElementById('cr-desde')?.value||'';
+  const hasta=document.getElementById('cr-hasta')?.value||'';
+  const out=document.getElementById('cr-out');
+  if(!out) return;
+  const vs=filt(DB.v,'custom',desde,hasta);
+  const cs=filt(DB.c,'custom',desde,hasta);
+  const t=TASA.get();
+  const tv=sum(vs,v=>(parseFloat(v.monto)||0)*(parseInt(v.cantidad)||1));
+  const tc=sum(cs,c=>parseFloat(c.monto)||0);
+  const gan=tv-tc;
+  const marg=tv>0?(gan/tv*100).toFixed(1):0;
+  // Agrupar ventas por método de pago
+  const porPago={};
+  vs.forEach(v=>{
+    const mp=v.pago||'Sin definir';
+    if(!porPago[mp]) porPago[mp]={usd:0,cnt:0};
+    porPago[mp].usd+=(parseFloat(v.monto)||0)*(parseInt(v.cantidad)||1);
+    porPago[mp].cnt++;
+  });
+  out.innerHTML=`
+    <div class="grid2" style="margin:14px 0">
+      <div class="card hi">
+        <div class="lbl">Total Ventas</div>
+        <div class="val">${fmtUSD(tv)}</div>
+        <div class="sub">${t>0?fmtBs(tv*t):''} · ${vs.length} tickets</div>
+      </div>
+      <div class="card gold">
+        <div class="lbl">Total Compras</div>
+        <div class="val">${fmtUSD(tc)}</div>
+        <div class="sub">${t>0?fmtBs(tc*t):''} · ${cs.length} registros</div>
+      </div>
+    </div>
+    <div class="card ${gan>=0?'green':'red'}" style="margin-bottom:14px">
+      <div class="lbl">Ganancia Bruta — Margen ${marg}%</div>
+      <div class="val" style="font-size:1.4rem">${fmtUSD(gan)}</div>
+      <div class="sub">${t>0?fmtBs(gan*t):''}</div>
+    </div>
+    <div class="sec">Desglose por Forma de Pago</div>
+    ${Object.entries(porPago).sort((a,b)=>b[1].usd-a[1].usd).map(([mp,d])=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;
+        padding:8px 0;border-bottom:1px solid var(--border2);font-size:.8rem">
+        ${mpTag(mp)}
+        <div style="text-align:right">
+          <div style="font-weight:700">${fmtUSD(d.usd)}</div>
+          ${t>0?`<div style="font-size:.7rem;color:#ffcc44">${fmtBs(d.usd*t)}</div>`:''}
+          <div style="font-size:.68rem;color:var(--t3)">${d.cnt} ticket${d.cnt>1?'s':''}</div>
+        </div>
+      </div>`).join('')}
+    <div class="bg2" style="margin-top:14px">
+      <button class="btn btn-s" onclick="expCSV('cruce')">⬇ Exportar CSV</button>
+      <button class="btn btn-s" onclick="expPDF()">📄 Exportar PDF</button>
+    </div>`;
+  // Actualizar header del PDF
+  const sub=document.getElementById('pdf-hdr-sub');
+  if(sub) sub.textContent=(desde&&hasta)?'Del '+desde+' al '+hasta:'Período completo';
+}
+
+// setCrucePreset — presets de período en cruce
+function setCrucePreset(per){
+  const d=new Date();
+  let desde='',hasta='';
+  const fmt2=dt=>dt.toISOString().split('T')[0];
+  hasta=fmt2(d);
+  if(per==='hoy')   desde=hasta;
+  if(per==='semana'){const s=new Date(d);s.setDate(d.getDate()-6);desde=fmt2(s);}
+  if(per==='mes')   {const m=new Date(d.getFullYear(),d.getMonth(),1);desde=fmt2(m);}
+  if(per==='todo')  desde='2020-01-01';
+  const de=document.getElementById('cr-desde');
+  const ha=document.getElementById('cr-hasta');
+  if(de) de.value=desde;
+  if(ha) ha.value=hasta;
+  calcCruce();
+}
+
+// expBackup — exportar backup completo JSON
+function expBackup(){
+  try{
+    const data={
+      version:'4.0',
+      fecha:new Date().toISOString(),
+      negocio:'Brasas & Leñas Sabroso',
+      ventas:DB.v,
+      compras:DB.c,
+      inventario:DB.inv,
+      movimientos:DB.movs,
+      facturas:FDB.docs,
+      tasa:TASA.get(),
+      usuarios:AUTH.getUsers().map(u=>({...u}))
+    };
+    const json=JSON.stringify(data,null,2);
+    const blob=new Blob([json],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download='BrasasSabroso_backup_'+new Date().toISOString().split('T')[0]+'.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('✅ Backup descargado. Guárdalo en Google Drive o WhatsApp.');
+  }catch(e){toast('❌ Error al crear backup: '+e.message,true);}
+}
+
+// impBackup — restaurar backup JSON
+function impBackup(){
+  const inp=document.getElementById('imp-file');
+  if(inp) inp.click();
+}
+
+function loadBackup(event){
+  const file=event.target.files[0];
+  if(!file) return;
+  if(!confirm('⚠️ Restaurar backup reemplazará TODOS los datos actuales.\n\n¿Continuar?')) return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const data=JSON.parse(e.target.result);
+      if(!data.ventas||!data.inventario){toast('❌ Archivo de backup inválido',true);return;}
+      DB.v=data.ventas||[];
+      DB.c=data.compras||[];
+      DB.inv=data.inventario||[];
+      DB.movs=data.movimientos||[];
+      DB.save();
+      FDB.docs=data.facturas||[];
+      FDB.save();
+      if(data.tasa&&data.tasa>0) TASA.set(data.tasa);
+      toast('✅ Backup restaurado: '+DB.v.length+' ventas, '+DB.inv.length+' productos.');
+      renderDash();
+    }catch(err){toast('❌ Error al restaurar: '+err.message,true);}
+  };
+  reader.readAsText(file);
+}
+
+// expPDF — imprimir cruce como PDF
+function expPDF(){
+  calcCruce();
+  setTimeout(function(){window.print();},300);
+}
+
+// copyScript — copiar URL del Apps Script
+function copyScript(){
+  const box=document.getElementById('script-box');
+  if(!box) return;
+  const text=box.textContent||box.innerText||'';
+  if(!text.trim()){toast('⚠️ Sin URL para copiar',true);return;}
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(text.trim())
+      .then(function(){toast('📋 URL copiada al portapapeles');})
+      .catch(function(){_copyFallback(text);});
+  } else {
+    _copyFallback(text);
+  }
+}
+function _copyFallback(text){
+  const ta=document.createElement('textarea');
+  ta.value=text;
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+  toast('📋 URL copiada');
+}
 
 (function checkSession(){
   FDB.load();
