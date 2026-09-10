@@ -917,11 +917,16 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.4) sepia(1) s
   <div class="card">
     <div class="card-title">⚙️ Gestión de Usuarios</div>
     <div style="font-size:.72rem;color:var(--t3);font-family:var(--mono);margin-bottom:12px">
-      4 roles: 👑 Admin · 👔 Dueño · 💼 Cajero · 👷 Vendedor
+      5 roles: 👑 Admin · 📊 Contador · 👔 Dueño · 💼 Cajero · 👷 Vendedor
     </div>
-    <button class="btn" onclick="showAddUser()">+ Agregar usuario</button>
+    <button class="btn btn-p" onclick="showAddUser()" 
+    style="width:100%;padding:14px;font-size:.95rem;font-weight:700;
+    background:linear-gradient(135deg,#e84000,#ff6a00);border:none;
+    border-radius:10px;cursor:pointer;color:#fff;letter-spacing:.3px;margin-bottom:4px">
+    ➕ Agregar Nuevo Usuario
+  </button>
   </div>
-  <div class="card" id="add-user-form" style="display:none;overflow:visible;scroll-margin-top:20px">
+  <div class="card" id="add-user-form" style="display:none;overflow:visible;scroll-margin-top:20px;margin-top:12px">
     <div class="card-title" id="add-user-title">Nuevo Usuario</div>
     <div class="frow">
       <div class="fcol"><label class="lbl">Usuario (login)</label><input class="inp" id="nu-user" placeholder="ej: maria"></div>
@@ -1579,7 +1584,7 @@ function go(id){
 
 function showAddUser(idx){
   var form=document.getElementById('add-user-form');
-  if(form) form.style.display='';
+  if(form){ form.style.display='block'; form.removeAttribute && form.removeAttribute('hidden'); }
   if(idx!==undefined){
     const users=AUTH.getUsers();
     const u=users[idx];
@@ -1599,14 +1604,22 @@ function showAddUser(idx){
     document.getElementById('nu-edit-idx').value='';
   }
 
-  // Scroll para que el formulario sea visible
+  // Scroll robusto — funciona en laptop y celular
   setTimeout(function(){
     var form=document.getElementById('add-user-form');
     var main=document.querySelector('.main');
-    if(form&&main){
-      form.scrollIntoView({behavior:'smooth',block:'start'});
-    }
-  },100);
+    if(!form||!main) return;
+    // Método 1: scrollIntoView dentro del contenedor
+    try{ form.scrollIntoView({behavior:'smooth',block:'nearest'}); }catch(e){}
+    // Método 2: scroll manual del contenedor
+    try{
+      var rect=form.getBoundingClientRect();
+      var mainRect=main.getBoundingClientRect();
+      if(rect.top < mainRect.top || rect.bottom > mainRect.bottom){
+        main.scrollTop=main.scrollTop+(rect.top-mainRect.top)-20;
+      }
+    }catch(e){}
+  },150);
 }
 
 function hideAddUser(){
